@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="studio.app">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/releases/osx/studio.app.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

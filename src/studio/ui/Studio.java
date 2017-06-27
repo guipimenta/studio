@@ -8,9 +8,8 @@ import java.io.*;
 import java.util.*;
 import javax.swing.*;
 import static javax.swing.JSplitPane.VERTICAL_SPLIT;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
-import javax.swing.event.UndoableEditEvent;
+
+import javax.swing.event.*;
 import javax.swing.filechooser.FileFilter;
 import javax.swing.filechooser.FileView;
 import javax.swing.plaf.basic.BasicSplitPaneDivider;
@@ -46,12 +45,21 @@ public class Studio extends JPanel implements Observer,WindowListener {
         Settings.addInitializer(new QSettingsInitializer());
         Settings.reset();
     }
+
+    // new editor stuff
+    private String currentFile = "";
+    private boolean autoCreateEmpty = false;
+    private HashMap<String, EditorTab> editorsMap;
+    private static final String EMPTY_FILENAME = "New File";
+    private JTabbedPane editorsPane;
+
+
     private JTable table;
     private String exportFilename;
     private String lastQuery = null;
     private JMenuBar menubar;
     private JToolBar toolbar;
-    private JEditorPane textArea;
+//    private JEditorPane textArea;
     private JSplitPane splitpane;
     private JTabbedPane tabbedPane;
     private Font font = null;
@@ -92,7 +100,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
     private int menuShortcutKeyMask = java.awt.Toolkit.getDefaultToolkit().getMenuShortcutKeyMask();
 
     public void refreshFrameTitle() {
-        String s = (String) textArea.getDocument().getProperty("filename");
+        String s = (String) this.getCurrentEditor().getEditor().getDocument().getProperty("filename");
         if (s == null)
             s = "Script" + myScriptNumber;
         String title = s.replace('\\','/');
@@ -147,92 +155,96 @@ public class Studio extends JPanel implements Observer,WindowListener {
         redoAction.setEnabled(um.canRedo());
     }
 
-    private void initDocument() {
-        initActions();
-        refreshActionState();
+    private EditorTab getCurrentEditor() {
+        return this.editorsMap.get(this.currentFile);
+    }
 
-        Document doc = null;
-        if (textArea == null) {
-            textArea = new JEditorPane("text/q","");
-            Action[] actions = textArea.getActions();
-
-            for (int i = 0;i < actions.length;i++)
-                if (actions[i] instanceof BaseKit.CopyAction) {
-                    copyAction = (BaseKit.CopyAction) actions[i];
-                    copyAction.putValue(Action.SHORT_DESCRIPTION,"Copy the selected text to the clipboard");
-                    copyAction.putValue(Action.SMALL_ICON,getImage(Config.imageBase2 + "copy.png"));
-                    copyAction.putValue(Action.NAME,I18n.getString("Copy"));
-                    copyAction.putValue(Action.MNEMONIC_KEY,new Integer(KeyEvent.VK_C));
-                    copyAction.putValue(Action.ACCELERATOR_KEY,KeyStroke.getKeyStroke(KeyEvent.VK_C,menuShortcutKeyMask));
-                }
-                else if (actions[i] instanceof BaseKit.CutAction) {
-                    cutAction = (BaseKit.CutAction) actions[i];
-                    cutAction.putValue(Action.SHORT_DESCRIPTION,"Cut the selected text");
-                    cutAction.putValue(Action.SMALL_ICON,getImage(Config.imageBase2 + "cut.png"));
-                    cutAction.putValue(Action.NAME,I18n.getString("Cut"));
-                    cutAction.putValue(Action.MNEMONIC_KEY,new Integer(KeyEvent.VK_T));
-                    cutAction.putValue(Action.ACCELERATOR_KEY,KeyStroke.getKeyStroke(KeyEvent.VK_X,menuShortcutKeyMask));
-                }
-                else if (actions[i] instanceof BaseKit.PasteAction) {
-                    pasteAction = (BaseKit.PasteAction) actions[i];
-                    pasteAction.putValue(Action.SHORT_DESCRIPTION,"Paste text from the clipboard");
-                    pasteAction.putValue(Action.SMALL_ICON,getImage(Config.imageBase2 + "paste.png"));
-                    pasteAction.putValue(Action.NAME,I18n.getString("Paste"));
-                    pasteAction.putValue(Action.MNEMONIC_KEY,new Integer(KeyEvent.VK_P));
-                    pasteAction.putValue(Action.ACCELERATOR_KEY,KeyStroke.getKeyStroke(KeyEvent.VK_V,menuShortcutKeyMask));
-                }
-                else if (actions[i] instanceof ExtKit.FindAction) {
-                    findAction = actions[i];
-                    findAction.putValue(Action.SHORT_DESCRIPTION,"Find text in the document");
-                    findAction.putValue(Action.SMALL_ICON,getImage(Config.imageBase2 + "find.png"));
-                    findAction.putValue(Action.NAME,I18n.getString("Find"));
-                    findAction.putValue(Action.MNEMONIC_KEY,new Integer(KeyEvent.VK_F));
-                    findAction.putValue(Action.ACCELERATOR_KEY,KeyStroke.getKeyStroke(KeyEvent.VK_F,menuShortcutKeyMask));
-                }
-                else if (actions[i] instanceof ExtKit.ReplaceAction) {
-                    replaceAction = actions[i];
-                    replaceAction.putValue(Action.SHORT_DESCRIPTION,"Replace text in the document");
-                    replaceAction.putValue(Action.SMALL_ICON,getImage(Config.imageBase2 + "replace.png"));
-                    replaceAction.putValue(Action.NAME,I18n.getString("Replace"));
-                    replaceAction.putValue(Action.MNEMONIC_KEY,new Integer(KeyEvent.VK_R));
-                    replaceAction.putValue(Action.ACCELERATOR_KEY,KeyStroke.getKeyStroke(KeyEvent.VK_R,menuShortcutKeyMask));
-                }
-                else if (actions[i] instanceof BaseKit.SelectAllAction) {
-                    selectAllAction = (BaseKit.SelectAllAction) actions[i];
-                    selectAllAction.putValue(Action.SHORT_DESCRIPTION,"Select all text in the document");
-                    selectAllAction.putValue(Action.SMALL_ICON,null);
-                    selectAllAction.putValue(Action.NAME,I18n.getString("SelectAll"));
-                    selectAllAction.putValue(Action.MNEMONIC_KEY,new Integer(KeyEvent.VK_A));
-                    selectAllAction.putValue(Action.ACCELERATOR_KEY,KeyStroke.getKeyStroke(KeyEvent.VK_A,menuShortcutKeyMask));
-                }
-                else if (actions[i] instanceof ActionFactory.UndoAction) {
-                    undoAction = (ActionFactory.UndoAction) actions[i];
-                    undoAction.putValue(Action.SHORT_DESCRIPTION,"Undo the last change to the document");
-                    undoAction.putValue(Action.SMALL_ICON,getImage(Config.imageBase2 + "undo.png"));
-                    undoAction.putValue(Action.NAME,I18n.getString("Undo"));
-                    undoAction.putValue(Action.MNEMONIC_KEY,new Integer(KeyEvent.VK_U));
-                    undoAction.putValue(Action.ACCELERATOR_KEY,KeyStroke.getKeyStroke(KeyEvent.VK_Z,menuShortcutKeyMask));
-                }
-                else if (actions[i] instanceof ActionFactory.RedoAction) {
-                    redoAction = (ActionFactory.RedoAction) actions[i];
-                    redoAction.putValue(Action.SHORT_DESCRIPTION,"Redo the last change to the document");
-                    redoAction.putValue(Action.SMALL_ICON,getImage(Config.imageBase2 + "redo.png"));
-                    redoAction.putValue(Action.NAME,I18n.getString("Redo"));
-                    redoAction.putValue(Action.MNEMONIC_KEY,new Integer(KeyEvent.VK_R));
-                    redoAction.putValue(Action.ACCELERATOR_KEY,KeyStroke.getKeyStroke(KeyEvent.VK_Y,menuShortcutKeyMask));
-                }
-
-            doc = textArea.getDocument();
-            doc.putProperty("filename",null);
-            windowListMonitor.fireMyEvent(new WindowListChangedEvent(this));
-        //  doc.putProperty("created", Boolean.TRUE);
+    private void setActions() {
+        Action[] actions = this.getCurrentEditor().getEditor().getActions();
+        for (Action action : actions) {
+            if (action instanceof BaseKit.CopyAction) {
+                copyAction = (BaseKit.CopyAction) action;
+                copyAction.putValue(Action.SHORT_DESCRIPTION, "Copy the selected text to the clipboard");
+                copyAction.putValue(Action.SMALL_ICON, getImage(Config.imageBase2 + "copy.png"));
+                copyAction.putValue(Action.NAME, I18n.getString("Copy"));
+                copyAction.putValue(Action.MNEMONIC_KEY, new Integer(KeyEvent.VK_C));
+                copyAction.putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_C, menuShortcutKeyMask));
+            } else if (action instanceof BaseKit.CutAction) {
+                cutAction = (BaseKit.CutAction) action;
+                cutAction.putValue(Action.SHORT_DESCRIPTION, "Cut the selected text");
+                cutAction.putValue(Action.SMALL_ICON, getImage(Config.imageBase2 + "cut.png"));
+                cutAction.putValue(Action.NAME, I18n.getString("Cut"));
+                cutAction.putValue(Action.MNEMONIC_KEY, new Integer(KeyEvent.VK_T));
+                cutAction.putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_X, menuShortcutKeyMask));
+            } else if (action instanceof BaseKit.PasteAction) {
+                pasteAction = (BaseKit.PasteAction) action;
+                pasteAction.putValue(Action.SHORT_DESCRIPTION, "Paste text from the clipboard");
+                pasteAction.putValue(Action.SMALL_ICON, getImage(Config.imageBase2 + "paste.png"));
+                pasteAction.putValue(Action.NAME, I18n.getString("Paste"));
+                pasteAction.putValue(Action.MNEMONIC_KEY, new Integer(KeyEvent.VK_P));
+                pasteAction.putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_V, menuShortcutKeyMask));
+            } else if (action instanceof ExtKit.FindAction) {
+                findAction = action;
+                findAction.putValue(Action.SHORT_DESCRIPTION, "Find text in the document");
+                findAction.putValue(Action.SMALL_ICON, getImage(Config.imageBase2 + "find.png"));
+                findAction.putValue(Action.NAME, I18n.getString("Find"));
+                findAction.putValue(Action.MNEMONIC_KEY, new Integer(KeyEvent.VK_F));
+                findAction.putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_F, menuShortcutKeyMask));
+            } else if (action instanceof ExtKit.ReplaceAction) {
+                replaceAction = action;
+                replaceAction.putValue(Action.SHORT_DESCRIPTION, "Replace text in the document");
+                replaceAction.putValue(Action.SMALL_ICON, getImage(Config.imageBase2 + "replace.png"));
+                replaceAction.putValue(Action.NAME, I18n.getString("Replace"));
+                replaceAction.putValue(Action.MNEMONIC_KEY, new Integer(KeyEvent.VK_R));
+                replaceAction.putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_R, menuShortcutKeyMask));
+            } else if (action instanceof BaseKit.SelectAllAction) {
+                selectAllAction = (BaseKit.SelectAllAction) action;
+                selectAllAction.putValue(Action.SHORT_DESCRIPTION, "Select all text in the document");
+                selectAllAction.putValue(Action.SMALL_ICON, null);
+                selectAllAction.putValue(Action.NAME, I18n.getString("SelectAll"));
+                selectAllAction.putValue(Action.MNEMONIC_KEY, new Integer(KeyEvent.VK_A));
+                selectAllAction.putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_A, menuShortcutKeyMask));
+            } else if (action instanceof ActionFactory.UndoAction) {
+                undoAction = (ActionFactory.UndoAction) action;
+                undoAction.putValue(Action.SHORT_DESCRIPTION, "Undo the last change to the document");
+                undoAction.putValue(Action.SMALL_ICON, getImage(Config.imageBase2 + "undo.png"));
+                undoAction.putValue(Action.NAME, I18n.getString("Undo"));
+                undoAction.putValue(Action.MNEMONIC_KEY, new Integer(KeyEvent.VK_U));
+                undoAction.putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuShortcutKeyMask));
+            } else if (action instanceof ActionFactory.RedoAction) {
+                redoAction = (ActionFactory.RedoAction) action;
+                redoAction.putValue(Action.SHORT_DESCRIPTION, "Redo the last change to the document");
+                redoAction.putValue(Action.SMALL_ICON, getImage(Config.imageBase2 + "redo.png"));
+                redoAction.putValue(Action.NAME, I18n.getString("Redo"));
+                redoAction.putValue(Action.MNEMONIC_KEY, new Integer(KeyEvent.VK_R));
+                redoAction.putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_Y, menuShortcutKeyMask));
+            }
         }
-        else
-            doc = textArea.getDocument();
+    }
 
-        JComponent c = (textArea.getUI() instanceof BaseTextUI) ? Utilities.getEditorUI(textArea).getExtComponent() : new JScrollPane(textArea);
+    private void createEditorTab() {
+        if(!this.editorsMap.containsKey(this.currentFile)) {
+            EditorTab editorTab = new EditorTab();
+            this.editorsMap.put(this.currentFile, editorTab);
+            editorTab.getEditor().getDocument().putProperty("filename", this.currentFile);
+            this.setActions();
+            windowListMonitor.fireMyEvent(new WindowListChangedEvent(this));
+        }
+    }
 
-        doc.putProperty("server",server);
+    private void initDocument() {
+        this.initActions();
+        this.refreshActionState();
+
+        this.createEditorTab();
+
+        Document doc = this.getCurrentEditor().getEditor().getDocument();
+
+        JComponent c = (this.getCurrentEditor().getEditor().getUI()
+                instanceof BaseTextUI) ? Utilities.getEditorUI(this.getCurrentEditor().getEditor()).getExtComponent()
+                : new JScrollPane(this.getCurrentEditor().getEditor());
+
+        doc.putProperty("server", server);
 
         MarkingDocumentListener mdl = (MarkingDocumentListener) doc.getProperty("MarkingDocumentListener");
         if (mdl == null) {
@@ -266,15 +278,15 @@ public class Studio extends JPanel implements Observer,WindowListener {
         um.discardAllEdits();
         updateUndoRedoState(um);
 
-        if (splitpane.getTopComponent() != c) {
-            splitpane.setTopComponent(c);
-            splitpane.setDividerLocation(0.5);
-        }
+
+        this.editorsPane.addTab(this.currentFile, c);
+        splitpane.setDividerLocation(0.5);
+
 
         rebuildToolbar();
         rebuildMenuBar();
 
-        textArea.requestFocus();
+//        textArea.requestFocus();
     }
 
     private void refreshActionState() {
@@ -319,14 +331,14 @@ public class Studio extends JPanel implements Observer,WindowListener {
 
         chooser.setFileFilter(ff);
 
-        String filename = (String) textArea.getDocument().getProperty("filename");
+        String filename = (String) this.getCurrentEditor().getEditor().getDocument().getProperty("filename");
         if (filename != null) {
             File file = new File(filename);
             File dir = new File(file.getPath());
             chooser.setCurrentDirectory(dir);
         }
 
-        int option = chooser.showOpenDialog(textArea);
+        int option = chooser.showOpenDialog(this.getCurrentEditor().getEditor());
 
         if (option == JFileChooser.APPROVE_OPTION) {
             File sf = chooser.getSelectedFile();
@@ -635,7 +647,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
                     chooser.setFileFilter(txtFilter);
         }
 
-        int option = chooser.showSaveDialog(textArea);
+        int option = chooser.showSaveDialog(this.getCurrentEditor().getEditor());
 
         if (option == JFileChooser.APPROVE_OPTION) {
             File sf = chooser.getSelectedFile();
@@ -700,25 +712,15 @@ public class Studio extends JPanel implements Observer,WindowListener {
         }
     }
 
-    public void newFile() {
-        try {
-            String filename = (String) textArea.getDocument().getProperty("filename");
-            if (!saveIfModified(filename))
-                return;
-
-            textArea.getDocument().remove(0,textArea.getDocument().getLength());
-            textArea.getDocument().putProperty("filename",null);
-            windowListMonitor.fireMyEvent(new WindowListChangedEvent(this));
-            initDocument();
-            refreshFrameTitle();
-        }
-        catch (BadLocationException ex) {
-            ex.printStackTrace();
-        }
+    private void newFile() {
+        this.currentFile = EMPTY_FILENAME;
+        this.initDocument();
+        this.refreshFrameTitle();
+        this.windowListMonitor.fireMyEvent(new WindowListChangedEvent(this));
     }
 
     public void openFile() {
-        String filename = (String) textArea.getDocument().getProperty("filename");
+        String filename = (String) this.getCurrentEditor().getEditor().getDocument().getProperty("filename");
         if (!saveIfModified(filename))
             return;
 
@@ -808,19 +810,24 @@ public class Studio extends JPanel implements Observer,WindowListener {
     }
 
     public void loadFile(String filename) {
+        String s = getContents(new File(filename));
+        this.currentFile = filename;
+        this.autoCreateEmpty = false;
+        initDocument();
         try {
-            String s = getContents(new File(filename));
-
-            textArea.getDocument().remove(0,textArea.getDocument().getLength());
-            textArea.getDocument().insertString(0,s,null);
-            textArea.getDocument().putProperty("filename",filename);
-            windowListMonitor.fireMyEvent(new WindowListChangedEvent(this));
-            initDocument();
-            textArea.setCaretPosition(0);
-            refreshFrameTitle();
+            this.getCurrentEditor().getEditor().getDocument().insertString(0,s,null);
+        } catch (BadLocationException e) {
+            e.printStackTrace();
         }
-        catch (BadLocationException ex) {
-            ex.printStackTrace();
+        this.getCurrentEditor().getEditor().setCaretPosition(0);
+        windowListMonitor.fireMyEvent(new WindowListChangedEvent(this));
+        refreshFrameTitle();
+    }
+
+    private void purgeFile(String filename) {
+        if(this.editorsMap.containsKey(this.currentFile)) {
+            this.editorsMap.remove(this.currentFile);
+            this.editorsPane.removeTabAt(this.getTabNumber(this.currentFile));
         }
     }
 
@@ -848,15 +855,14 @@ public class Studio extends JPanel implements Observer,WindowListener {
 
         chooser.setFileFilter(ff);
 
-        String filename = (String) textArea.getDocument().getProperty("filename");
+        String filename = (String) this.getCurrentEditor().getEditor().getDocument().getProperty("filename");
         if (filename != null) {
             File file = new File(filename);
             File dir = new File(file.getPath());
             chooser.setCurrentDirectory(dir);
         }
 
-//        chooser.setMultiSelectionEnabled(true);
-        int option = chooser.showSaveDialog(textArea);
+        int option = chooser.showSaveDialog(this.getCurrentEditor().getEditor());
 
         if (option == JFileChooser.APPROVE_OPTION) {
             File sf = chooser.getSelectedFile();
@@ -880,8 +886,12 @@ public class Studio extends JPanel implements Observer,WindowListener {
                     if (choice != JOptionPane.YES_OPTION)
                         return false;
                 }
-
-                return saveFile(filename,true);
+                String prevFile = this.currentFile;
+                if(this.saveFile(filename,true)) {
+                    this.purgeFile(prevFile);
+                    this.loadFile(filename);
+                    return true;
+                }
             }
             catch (Exception e) {
             }
@@ -891,16 +901,20 @@ public class Studio extends JPanel implements Observer,WindowListener {
     //   private boolean wasLoaded=false;
     // returns true if saved, false if error or cancelled
     public boolean saveFile(String filename,boolean force) {
-        if (filename == null)
+        if (filename == null || filename.equals(EMPTY_FILENAME)) {
             return saveAsFile();
+        }
 
         try {
-            if (!force)
-                if (null == textArea.getDocument().getProperty("filename"))
+            if (!force) {
+                if (null == this.getCurrentEditor().getEditor().getDocument().getProperty("filename")) {
                     return saveAsFile();
+                }
+            }
 
-            textArea.write(new BufferedWriter(new OutputStreamWriter(new FileOutputStream(filename), "UTF-8")));
-            textArea.getDocument().putProperty("filename",filename);
+            this.getCurrentEditor().getEditor().write(new BufferedWriter(new OutputStreamWriter(new FileOutputStream(filename), "UTF-8")));
+            this.getCurrentEditor().getEditor().getDocument().putProperty("filename", filename);
+            this.currentFile = filename;
             windowListMonitor.fireMyEvent(new WindowListChangedEvent(this));
             setModified(false);
             addToMruFiles(filename);
@@ -908,6 +922,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
             return true;
         }
         catch (Exception e) {
+            System.out.println("HERE");
         }
 
         return false;
@@ -950,8 +965,8 @@ public class Studio extends JPanel implements Observer,WindowListener {
     }
 
     private void setModified(boolean value) {
-        if (textArea != null) {
-            Document doc = textArea.getDocument();
+        if (this.getCurrentEditor().getEditor() != null) {
+            Document doc = this.getCurrentEditor().getEditor().getDocument();
 
             if (doc != null) {
                 MarkingDocumentListener mdl = (MarkingDocumentListener) doc.getProperty("MarkingDocumentListener");
@@ -962,8 +977,8 @@ public class Studio extends JPanel implements Observer,WindowListener {
     }
 
     private boolean getModified() {
-        if (textArea != null) {
-            Document doc = textArea.getDocument();
+        if (this.getCurrentEditor().getEditor() != null) {
+            Document doc = this.getCurrentEditor().getEditor().getDocument();
 
             if (doc != null) {
                 MarkingDocumentListener mdl = (MarkingDocumentListener) doc.getProperty("MarkingDocumentListener");
@@ -981,12 +996,12 @@ public class Studio extends JPanel implements Observer,WindowListener {
 
         this.server = server;
 
-        if (textArea != null) {
-            Document doc = textArea.getDocument();
+        if (this.getCurrentEditor().getEditor() != null) {
+            Document doc = this.getCurrentEditor().getEditor().getDocument();
 
             if (doc != null)
                 doc.putProperty("server",server);
-            Utilities.getEditorUI(textArea).getComponent().setBackground(server.getBackgroundColor());
+            Utilities.getEditorUI(this.getCurrentEditor().getEditor()).getComponent().setBackground(server.getBackgroundColor());
         }
 
         if (server != null) {
@@ -1046,8 +1061,8 @@ public class Studio extends JPanel implements Observer,WindowListener {
                                          null) {
             public void actionPerformed(ActionEvent e) {
                 quitWindow();
-                if (windowList.size() == 0)
-                    System.exit(0);
+//                if (windowList.size() == 0)
+//                    System.exit(0);
             }
         };
 
@@ -1165,8 +1180,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
                                         new Integer(KeyEvent.VK_S),
                                         KeyStroke.getKeyStroke(KeyEvent.VK_S,menuShortcutKeyMask)) {
             public void actionPerformed(ActionEvent e) {
-                String filename = (String) textArea.getDocument().getProperty("filename");
-                saveFile(filename,false);
+                saveFile(currentFile,false);
             }
         };
 
@@ -1211,7 +1225,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
                 if (worker != null) {
                     worker.interrupt();
                     stopAction.setEnabled(false);
-                    textArea.setCursor(new Cursor(Cursor.DEFAULT_CURSOR));
+                    getCurrentEditor().getEditor().setCursor(new Cursor(Cursor.DEFAULT_CURSOR));
                 }
             }
         };
@@ -1341,23 +1355,35 @@ public class Studio extends JPanel implements Observer,WindowListener {
         return okToExit;
     }
 
-    public boolean quitWindow() {
+    private int getTabNumber(String title) {
+        for(int i  = 0; i < this.editorsPane.getTabCount(); i++) {
+            if(this.editorsPane.getTitleAt(i).equals(title)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public boolean closeFile() {
         if (getModified()) {
             int choice = JOptionPane.showOptionDialog(frame,
-                                                      "Changes not saved.\nSave now?",
-                                                      "Save changes?",
-                                                      JOptionPane.YES_NO_CANCEL_OPTION,
-                                                      JOptionPane.QUESTION_MESSAGE,
-                                                      getImage(Config.imageBase + "32x32/question.png"),
-                                                      null, // use standard button titles
-                                                      null);      // no default selection
+                    "Changes not saved to: " + this.currentFile + ".\nSave now?",
+                    "Save changes?",
+                    JOptionPane.YES_NO_CANCEL_OPTION,
+                    JOptionPane.QUESTION_MESSAGE,
+                    getImage(Config.imageBase + "32x32/question.png"),
+                    null, // use standard button titles
+                    null);      // no default selection
 
             if (choice == 0)
                 try {
-                    String filename = (String) textArea.getDocument().getProperty("filename");
-                    if (!saveFile(filename,false))
+                    String filename = (String) this.getCurrentEditor().getEditor().getDocument().getProperty("filename");
+                    if (!saveFile(filename,false)) {
                         // was cancelled so return
                         return false;
+                    } else {
+                        this.tabbedPane.removeTabAt(this.getTabNumber(this.currentFile));
+                    }
                 }
                 catch (Exception e) {
                     return false;
@@ -1365,21 +1391,31 @@ public class Studio extends JPanel implements Observer,WindowListener {
             else if ((choice == 2) || (choice == JOptionPane.CLOSED_OPTION))
                 return false;
         }
-
-        windowList.remove(this);
-        windowListMonitor.removeEventListener(windowListChangedEventListener);
-        windowListMonitor.fireMyEvent(new WindowListChangedEvent(this));
-        frame.dispose();
-
         return true;
+    }
+
+    public boolean quitWindow() {
+        boolean closeWindow = true;
+        for(String filename : this.editorsMap.keySet()) {
+            this.currentFile = filename;
+            closeWindow = closeWindow & this.closeFile();
+        }
+        if(closeWindow) {
+            this.editorsMap.clear();
+            windowList.remove(this);
+            windowListMonitor.removeEventListener(windowListChangedEventListener);
+            windowListMonitor.fireMyEvent(new WindowListChangedEvent(this));
+            frame.dispose();
+            return true;
+        }
+        return false;
+
     }
 
     private void rebuildMenuBar() {
         menubar = createMenuBar();
         SwingUtilities.invokeLater(
-            new Runnable() {
-            
-                public void run() {
+                () -> {
                     if (frame != null) {
                         frame.setJMenuBar(menubar);
                         menubar.validate();
@@ -1387,8 +1423,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
                         frame.validate();
                         frame.repaint();
                     }
-                }
-            });
+                });
     }
 
     private JMenuBar createMenuBar() {
@@ -1425,7 +1460,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
                 item.addActionListener(new ActionListener() {
                     
                                        public void actionPerformed(ActionEvent e) {
-                                           loadMRUFile(filename,(String) textArea.getDocument().getProperty("filename"));
+                                           loadMRUFile(filename,(String) getCurrentEditor().getEditor().getDocument().getProperty("filename"));
                                        }
                                    });
                 menu.add(item);
@@ -1532,7 +1567,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
 
                 if (o instanceof Studio) {
                     Studio r = (Studio) o;
-                    String filename = (String) r.textArea.getDocument().getProperty("filename");
+                    String filename = (String) r.getCurrentEditor().getEditor().getDocument().getProperty("filename");
 
                     if (filename != null)
                         t = filename.replace('\\','/');
@@ -1804,14 +1839,18 @@ public class Studio extends JPanel implements Observer,WindowListener {
     public Studio(Server server,String filename) {
         super(true);
 
+        this.editorsMap = new HashMap<>();
+        this.editorsPane = new JTabbedPane();
+
+        this.editorsPane.addChangeListener(e -> {
+            this.currentFile = this.editorsPane.getTitleAt(this.editorsPane.getSelectedIndex());
+        });
+
         registerForMacOSXEvents();
 
-        windowListChangedEventListener = new WindowListChangedEventListener() {
-            
-            public void WindowListChangedEventOccurred(WindowListChangedEvent evt) {
-                rebuildMenuBar();
-                rebuildToolbar();
-            }
+        windowListChangedEventListener = evt -> {
+            rebuildMenuBar();
+            rebuildToolbar();
         };
 
         windowListMonitor.addEventListener(windowListChangedEventListener);
@@ -1820,16 +1859,21 @@ public class Studio extends JPanel implements Observer,WindowListener {
         frame = new JFrame();
         windowList.add(this);
 
-        initDocument();
+        this.autoCreateEmpty = filename == null;
+        if(this.autoCreateEmpty) {
+            initDocument();
+        } else {
+            loadFile(filename);
+        }
         setServer(server);
-
         menubar = createMenuBar();
         toolbar = createToolbar();
 
-        tabbedPane = new JTabbedPane();
-        splitpane.setBottomComponent(tabbedPane);
-        splitpane.setOneTouchExpandable(true);
-        splitpane.setOrientation(JSplitPane.VERTICAL_SPLIT);
+        this.tabbedPane = new JTabbedPane();
+        this.splitpane.setBottomComponent(tabbedPane);
+        this.splitpane.setTopComponent(editorsPane);
+        this.splitpane.setOneTouchExpandable(true);
+        this.splitpane.setOrientation(JSplitPane.VERTICAL_SPLIT);
         try {
             Component divider = ((BasicSplitPaneUI) splitpane.getUI()).getDivider();
 
@@ -1843,16 +1887,16 @@ public class Studio extends JPanel implements Observer,WindowListener {
         }
         catch (ClassCastException e) {
         }
-        splitpane.setContinuousLayout(true);
+        this.splitpane.setContinuousLayout(true);
 
         Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
 
         frame.setJMenuBar(menubar);
 
-        if (filename != null)
-            loadFile(filename);
-        else
-            myScriptNumber = scriptNumber++;
+//        if (filename != null)
+//            loadFile(filename);
+//        else
+//            myScriptNumber = scriptNumber++;
 
         refreshFrameTitle();
 
@@ -1872,10 +1916,10 @@ public class Studio extends JPanel implements Observer,WindowListener {
 
         //     frame.pack();
         frame.setVisible(true);
-        splitpane.setDividerLocation(0.5);
+        this.splitpane.setDividerLocation(0.5);
 
-        textArea.requestFocus();
-        splitpane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY,new PropertyChangeListener(){
+//        textArea.requestFocus();
+        this.splitpane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY,new PropertyChangeListener(){
           public void propertyChange(PropertyChangeEvent pce){
             String s=splitpane.getDividerLocation()>=splitpane.getMaximumDividerLocation()?I18n.getString("MinimizeEditorPane"):splitpane.getDividerLocation()<=splitpane.getMinimumDividerLocation()?I18n.getString("RestoreEditorPane"):I18n.getString("MaximizeEditorPane");
             minMaxDividerAction.putValue(Action.SHORT_DESCRIPTION,s);
@@ -1945,11 +1989,11 @@ public class Studio extends JPanel implements Observer,WindowListener {
     }
 
     public void executeQueryCurrentLine() {
-        executeQuery(getCurrentLineEditorText(textArea));
+        executeQuery(getCurrentLineEditorText(this.getCurrentEditor().getEditor()));
     }
 
     public void executeQuery() {
-        executeQuery(getEditorText(textArea));
+        executeQuery(getEditorText(this.getCurrentEditor().getEditor()));
     }
 
     private void executeQuery(String text) {
@@ -2101,9 +2145,8 @@ public class Studio extends JPanel implements Observer,WindowListener {
     Server server = null;
 
       public void executeK4Query(final String text) {
-        final Cursor cursor = textArea.getCursor();
-
-        textArea.setCursor(new java.awt.Cursor(java.awt.Cursor.WAIT_CURSOR));
+        final Cursor cursor = this.getCurrentEditor().getEditor().getCursor();
+        this.getCurrentEditor().getEditor().setCursor(new java.awt.Cursor(java.awt.Cursor.WAIT_CURSOR));
         tabbedPane.removeAll();
         worker = new SwingWorker() {
             Server s = null;
@@ -2195,7 +2238,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
                         }
                     else
                         try {
-                            Utilities.setStatusText(textArea, "Last execution time:"+(execTime>0?""+execTime:"<1")+" mS");
+                            Utilities.setStatusText(getCurrentEditor().getEditor(), "Last execution time:"+(execTime>0?""+execTime:"<1")+" mS");
                             processK4Results(r);
                         }
                         catch (Exception e) {
@@ -2217,7 +2260,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
                 //    c.close();
                 c = null;
 
-                textArea.setCursor(cursor);
+                getCurrentEditor().getEditor().setCursor(cursor);
 
                 stopAction.setEnabled(false);
                 executeAction.setEnabled(true);
