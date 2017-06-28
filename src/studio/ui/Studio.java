@@ -51,6 +51,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
     private String currentFile = "";
     private boolean autoCreateEmpty = false;
     private HashMap<String, EditorTab> editorsMap;
+    private HashMap<String, Server> serverMap;
     private static final String EMPTY_FILENAME = "New File";
     private JTabbedPane editorsPane;
 
@@ -268,6 +269,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
 
 
         this.editorsPane.addTab(this.currentFile, c);
+        this.editorsPane.setSelectedIndex(this.editorsPane.getComponentCount() - 1);
         this.splitpane.setDividerLocation(0.5);
 
 
@@ -710,7 +712,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
     public void openFile() {
         String filename = getFilename();
 
-        if (filename != null) {
+        if (filename != null && !this.editorsMap.containsKey(filename)) {
             loadFile(filename);
             addToMruFiles(filename);
         }
@@ -745,9 +747,11 @@ public class Studio extends JPanel implements Observer,WindowListener {
     }
 
     public void loadMRUFile(String filename) {
-        loadFile(filename);
-        addToMruFiles(filename);
-        setServer(server);
+        if(!this.editorsMap.containsKey(filename)) {
+            loadFile(filename);
+            addToMruFiles(filename);
+            setServer(server);
+        }
     }
 
     private void addToMruFiles(String filename) {
@@ -986,6 +990,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
             return;
 
         this.server = server;
+        this.serverMap.put(this.currentFile, server);
 
         if (this.getCurrentEditor().getEditor() != null) {
             Document doc = this.getCurrentEditor().getEditor().getDocument();
@@ -1832,11 +1837,18 @@ public class Studio extends JPanel implements Observer,WindowListener {
         super(true);
 
         this.editorsMap = new HashMap<>();
+        this.serverMap = new HashMap<>();
         this.editorsPane = new JTabbedPane();
 
         this.editorsPane.addChangeListener(e -> {
             if(this.editorsPane.getSelectedIndex() >= 0) {
                 this.currentFile = this.editorsPane.getTitleAt(this.editorsPane.getSelectedIndex());
+                Server fileServer = this.serverMap.get(this.currentFile);
+                if(fileServer != null) {
+                    setServer(fileServer);
+                } else {
+                    this.serverMap.put(this.currentFile, this.server);
+                }
             }
         });
 
