@@ -6,6 +6,7 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.*;
 import java.util.*;
+import java.util.List;
 import javax.swing.*;
 import static javax.swing.JSplitPane.VERTICAL_SPLIT;
 
@@ -707,11 +708,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
     }
 
     public void openFile() {
-        String filename = (String) this.getCurrentEditor().getEditor().getDocument().getProperty("filename");
-        if (!saveIfModified(filename))
-            return;
-
-        filename = getFilename();
+        String filename = getFilename();
 
         if (filename != null) {
             loadFile(filename);
@@ -747,10 +744,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
         return true;
     }
 
-    public void loadMRUFile(String filename,String oldFilename) {
-        if (!saveIfModified(oldFilename))
-            return;
-
+    public void loadMRUFile(String filename) {
         loadFile(filename);
         addToMruFiles(filename);
         setServer(server);
@@ -974,7 +968,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
     }
 
     private boolean getModified() {
-        if (this.getCurrentEditor().getEditor() != null) {
+        if (this.getCurrentEditor() != null && this.getCurrentEditor().getEditor() != null) {
             Document doc = this.getCurrentEditor().getEditor().getDocument();
 
             if (doc != null) {
@@ -1057,7 +1051,8 @@ public class Studio extends JPanel implements Observer,WindowListener {
                                          new Integer(KeyEvent.VK_C),
                                          null) {
             public void actionPerformed(ActionEvent e) {
-                quitWindow();
+                closeFile();
+//                quitWindow();
 //                if (windowList.size() == 0)
 //                    System.exit(0);
             }
@@ -1378,22 +1373,27 @@ public class Studio extends JPanel implements Observer,WindowListener {
                     if (!saveFile(filename,false)) {
                         // was cancelled so return
                         return false;
-                    } else {
-                        this.tabbedPane.removeTabAt(this.getTabNumber(this.currentFile));
                     }
                 }
                 catch (Exception e) {
                     return false;
                 }
-            else if ((choice == 2) || (choice == JOptionPane.CLOSED_OPTION))
+            else if ((choice == 2) || (choice == JOptionPane.CLOSED_OPTION)) {
+                // here we user don' want to save
+                // purge file to make it go away
+                this.purgeFile();
                 return false;
+            }
         }
+        this.purgeFile();
         return true;
     }
 
     public boolean quitWindow() {
         boolean closeWindow = true;
-        for(String filename : this.editorsMap.keySet()) {
+        List<String> fileNames = new ArrayList<>();
+        fileNames.addAll(this.editorsMap.keySet());
+        for(String filename : fileNames) {
             this.currentFile = filename;
             closeWindow = closeWindow & this.closeFile();
         }
@@ -1454,12 +1454,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
                 JMenuItem item = new JMenuItem("" + (i + 1) + " " + filename);
                 item.setMnemonic(mnems[i]);
                 item.setIcon(getImage(Config.imageBase2 + "blank.png"));
-                item.addActionListener(new ActionListener() {
-                    
-                                       public void actionPerformed(ActionEvent e) {
-                                           loadMRUFile(filename,(String) getCurrentEditor().getEditor().getDocument().getProperty("filename"));
-                                       }
-                                   });
+                item.addActionListener(e -> loadMRUFile(filename));
                 menu.add(item);
             }
         }
