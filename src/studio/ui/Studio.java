@@ -114,7 +114,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
     }
 
     public interface WindowListChangedEventListener extends EventListener {
-        public void WindowListChangedEventOccurred(WindowListChangedEvent evt);
+        void WindowListChangedEventOccurred(WindowListChangedEvent evt);
     }
 
     public static class WindowListMonitor {
@@ -135,21 +135,9 @@ public class Studio extends JPanel implements Observer,WindowListener {
                     ((WindowListChangedEventListener) listeners[i + 1]).WindowListChangedEventOccurred(evt);
         }
     }
+
     public static WindowListMonitor windowListMonitor = new WindowListMonitor();
-/*
-    private void updateKeyBindings(JEditorPane editorPane) {
-        InputMap inputMap = editorPane.getInputMap();
-        inputMap.put(KeyStroke.getKeyStroke("DELETE"),ExtKit.deleteNextCharAction);
-        inputMap.put(KeyStroke.getKeyStroke("BACK_SPACE"),ExtKit.deletePrevCharAction);
-        inputMap.put(KeyStroke.getKeyStroke("ENTER"),ExtKit.insertBreakAction);
-        inputMap.put(KeyStroke.getKeyStroke("UP"),ExtKit.upAction);
-        inputMap.put(KeyStroke.getKeyStroke("DOWN"),ExtKit.downAction);
-        inputMap.put(KeyStroke.getKeyStroke("LEFT"),ExtKit.backwardAction);
-        inputMap.put(KeyStroke.getKeyStroke("RIGHT"),ExtKit.forwardAction);
-        inputMap.put(KeyStroke.getKeyStroke("ctrl Z"),ExtKit.undoAction);
-        inputMap.put(KeyStroke.getKeyStroke("ctrl Y"),ExtKit.redoAction);
-    }
-*/
+
     private void updateUndoRedoState(UndoManager um) {
         undoAction.setEnabled(um.canUndo());
         redoAction.setEnabled(um.canRedo());
@@ -222,24 +210,23 @@ public class Studio extends JPanel implements Observer,WindowListener {
         }
     }
 
-    private void createEditorTab() {
-        if(!this.editorsMap.containsKey(this.currentFile)) {
+    private void createEditorTab(String filename) {
+        if(!this.editorsMap.containsKey(filename)) {
             EditorTab editorTab = new EditorTab();
-            this.editorsMap.put(this.currentFile, editorTab);
-            editorTab.getEditor().getDocument().putProperty("filename", this.currentFile);
+            this.editorsMap.put(filename, editorTab);
+            editorTab.getEditor().getDocument().putProperty("filename", filename);
             this.setActions();
             windowListMonitor.fireMyEvent(new WindowListChangedEvent(this));
         }
     }
 
-    private void initDocument() {
+    private void initDocument(String filename) {
         this.initActions();
         this.refreshActionState();
+        this.createEditorTab(filename);
 
-        this.createEditorTab();
 
         Document doc = this.getCurrentEditor().getEditor().getDocument();
-
         JComponent c = (this.getCurrentEditor().getEditor().getUI()
                 instanceof BaseTextUI) ? Utilities.getEditorUI(this.getCurrentEditor().getEditor()).getExtComponent()
                 : new JScrollPane(this.getCurrentEditor().getEditor());
@@ -280,7 +267,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
 
 
         this.editorsPane.addTab(this.currentFile, c);
-        splitpane.setDividerLocation(0.5);
+        this.splitpane.setDividerLocation(0.5);
 
 
         rebuildToolbar();
@@ -714,7 +701,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
 
     private void newFile() {
         this.currentFile = EMPTY_FILENAME;
-        this.initDocument();
+        this.initDocument(this.currentFile);
         this.refreshFrameTitle();
         this.windowListMonitor.fireMyEvent(new WindowListChangedEvent(this));
     }
@@ -813,7 +800,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
         String s = getContents(new File(filename));
         this.currentFile = filename;
         this.autoCreateEmpty = false;
-        initDocument();
+        initDocument(filename);
         try {
             this.getCurrentEditor().getEditor().getDocument().insertString(0,s,null);
         } catch (BadLocationException e) {
@@ -824,10 +811,20 @@ public class Studio extends JPanel implements Observer,WindowListener {
         refreshFrameTitle();
     }
 
-    private void purgeFile(String filename) {
+    private void purgeFile() {
         if(this.editorsMap.containsKey(this.currentFile)) {
             this.editorsMap.remove(this.currentFile);
-            this.editorsPane.removeTabAt(this.getTabNumber(this.currentFile));
+            this.removeTabWithTitle(this.currentFile);
+        }
+    }
+
+    private void removeTabWithTitle(String tabTitleToRemove) {
+        for (int i = 0; i < editorsPane.getTabCount(); i++) {
+            String tabTitle = editorsPane.getTitleAt(i);
+            if (tabTitle.equals(tabTitleToRemove)) {
+                editorsPane.remove(i);
+                break;
+            }
         }
     }
 
@@ -886,12 +883,8 @@ public class Studio extends JPanel implements Observer,WindowListener {
                     if (choice != JOptionPane.YES_OPTION)
                         return false;
                 }
-                String prevFile = this.currentFile;
-                if(this.saveFile(filename,true)) {
-                    this.purgeFile(prevFile);
-                    this.loadFile(filename);
-                    return true;
-                }
+
+                return this.saveFile(filename,true);
             }
             catch (Exception e) {
             }
@@ -900,7 +893,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
     }
     //   private boolean wasLoaded=false;
     // returns true if saved, false if error or cancelled
-    public boolean saveFile(String filename,boolean force) {
+    public boolean saveFile(String filename, boolean force) {
         if (filename == null || filename.equals(EMPTY_FILENAME)) {
             return saveAsFile();
         }
@@ -914,7 +907,11 @@ public class Studio extends JPanel implements Observer,WindowListener {
 
             this.getCurrentEditor().getEditor().write(new BufferedWriter(new OutputStreamWriter(new FileOutputStream(filename), "UTF-8")));
             this.getCurrentEditor().getEditor().getDocument().putProperty("filename", filename);
-            this.currentFile = filename;
+            if(this.currentFile != filename) {
+                this.purgeFile();
+                this.currentFile = filename;
+                this.loadFile(filename);
+            }
             windowListMonitor.fireMyEvent(new WindowListChangedEvent(this));
             setModified(false);
             addToMruFiles(filename);
@@ -1177,7 +1174,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
         saveFileAction = new UserAction(I18n.getString("Save"),
                                         getImage(Config.imageBase2 + "disks.png"),
                                         "Save the script",
-                                        new Integer(KeyEvent.VK_S),
+                                        KeyEvent.VK_S,
                                         KeyStroke.getKeyStroke(KeyEvent.VK_S,menuShortcutKeyMask)) {
             public void actionPerformed(ActionEvent e) {
                 saveFile(currentFile,false);
@@ -1843,7 +1840,9 @@ public class Studio extends JPanel implements Observer,WindowListener {
         this.editorsPane = new JTabbedPane();
 
         this.editorsPane.addChangeListener(e -> {
-            this.currentFile = this.editorsPane.getTitleAt(this.editorsPane.getSelectedIndex());
+            if(this.editorsPane.getSelectedIndex() >= 0) {
+                this.currentFile = this.editorsPane.getTitleAt(this.editorsPane.getSelectedIndex());
+            }
         });
 
         registerForMacOSXEvents();
@@ -1858,13 +1857,14 @@ public class Studio extends JPanel implements Observer,WindowListener {
         splitpane = new JSplitPane();
         frame = new JFrame();
         windowList.add(this);
-
-        this.autoCreateEmpty = filename == null;
-        if(this.autoCreateEmpty) {
-            initDocument();
+        if(filename == null) {
+            this.currentFile = EMPTY_FILENAME;
+            initDocument(this.currentFile);
         } else {
-            loadFile(filename);
+            this.currentFile = filename;
+            this.loadFile(this.currentFile);
         }
+
         setServer(server);
         menubar = createMenuBar();
         toolbar = createToolbar();
@@ -1892,12 +1892,6 @@ public class Studio extends JPanel implements Observer,WindowListener {
         Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
 
         frame.setJMenuBar(menubar);
-
-//        if (filename != null)
-//            loadFile(filename);
-//        else
-//            myScriptNumber = scriptNumber++;
-
         refreshFrameTitle();
 
         frame.getContentPane().add(toolbar,BorderLayout.NORTH);
