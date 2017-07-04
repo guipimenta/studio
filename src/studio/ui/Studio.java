@@ -49,12 +49,10 @@ public class Studio extends JPanel implements Observer,WindowListener {
 
     // new editor stuff
     private String currentFile = "";
-    private boolean autoCreateEmpty = false;
     private HashMap<String, EditorTab> editorsMap;
     private HashMap<String, Server> serverMap;
     private static final String EMPTY_FILENAME = "New File";
-    private JTabbedPane editorsPane;
-
+    private DndTabbedPane editorsPane;
 
     private JTable table;
     private String exportFilename;
@@ -797,7 +795,6 @@ public class Studio extends JPanel implements Observer,WindowListener {
     public void loadFile(String filename) {
         String s = getContents(new File(filename));
         this.currentFile = filename;
-        this.autoCreateEmpty = false;
         initDocument(filename);
         try {
             this.getCurrentEditor().getEditor().getDocument().insertString(0,s,null);
@@ -1838,7 +1835,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
 
         this.editorsMap = new HashMap<>();
         this.serverMap = new HashMap<>();
-        this.editorsPane = new JTabbedPane();
+        this.editorsPane = new DndTabbedPane();
 
         this.editorsPane.addChangeListener(e -> {
             if(this.editorsPane.getSelectedIndex() >= 0) {
