@@ -53,6 +53,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
     private HashMap<String, Server> serverMap;
     private static final String EMPTY_FILENAME = "New File";
     private DndTabbedPane editorsPane;
+    private JComboBox comboBox;
 
     private JTable table;
     private String exportFilename;
@@ -1615,6 +1616,11 @@ public class Studio extends JPanel implements Observer,WindowListener {
         f.show();
     }
 
+    private void comboBoxChange() {
+        String serverName = (String) this.comboBox.getSelectedItem();
+        setServer(Config.getInstance().getServer(serverName));
+    }
+
     private void rebuildToolbar() {
         if (toolbar != null) {
             toolbar.removeAll();
@@ -1624,7 +1630,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
             if ((names != null) && (names.length > 0)) {
                 toolbar.add(new JLabel(I18n.getString("Server")));
 
-                JComboBox combo = new JComboBox(names) {
+                this.comboBox = new JComboBox(names) {
                     
                     public Dimension getMinimumSize() {
                         return getPreferredSize();
@@ -1636,47 +1642,47 @@ public class Studio extends JPanel implements Observer,WindowListener {
                     }
                 };
 
-                int offset = Config.getInstance().getOffset(server);
+                AutoCompleteComboBox.enable(this.comboBox);
 
+                int offset = Config.getInstance().getOffset(server);
                 if (offset == -1) {
                     Server[] servers = Config.getInstance().getServers();
-
-                    if (servers.length > 0)
+                    if (servers.length > 0){
                         setServer(servers[0]);
-
+                    }
                     offset = 0;
                 }
 
-                combo.setSelectedIndex(offset);
-                combo.setToolTipText("Select the server context");
+                this.comboBox.setSelectedIndex(offset);
+                this.comboBox.setToolTipText("Select the server context");
 
-                final Observer o = this;
-
-                ActionListener al = new ActionListener() {
-                    
-                    public void actionPerformed(ActionEvent e) {
-                        String selection = (String) ((JComboBox) e.getSource()).getSelectedItem();
-
-                        setServer(Config.getInstance().getServer(selection));
-
-                        //  setLanguage(Language.Q);
-
-                        SwingUtilities.invokeLater(new Runnable() {
-                            
-                                                   public void run() {
-                                                       rebuildToolbar();
-                                                       toolbar.validate();
-                                                       toolbar.repaint();
-                                                   }
-                                               });
+                this.comboBox.addActionListener(actionEvent -> {
+                    if(actionEvent.getModifiers() == InputEvent.BUTTON1_MASK) {
+                        this.comboBoxChange();
                     }
-                };
+                });
 
-                combo.addActionListener(al);
+                this.comboBox.getEditor().getEditorComponent().addKeyListener(new KeyListener() {
+                    @Override
+                    public void keyTyped(KeyEvent keyEvent) {
 
-                combo.setRequestFocusEnabled(false);
+                    }
 
-                toolbar.add(combo);
+                    @Override
+                    public void keyPressed(KeyEvent keyEvent) {
+                        if(keyEvent.getKeyCode() == KeyEvent.VK_ENTER) {
+                            comboBoxChange();
+                        }
+                    }
+
+                    @Override
+                    public void keyReleased(KeyEvent keyEvent) {
+
+                    }
+                });
+
+
+                toolbar.add(this.comboBox);
                 toolbar.addSeparator();
             }
 
