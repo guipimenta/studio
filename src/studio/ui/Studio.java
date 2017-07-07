@@ -54,6 +54,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
     private static final String EMPTY_FILENAME = "New File";
     private DndTabbedPane editorsPane;
     private JComboBox comboBox;
+    private HashMap<String, String> shortNameMap;
 
     private JTable table;
     private String exportFilename;
@@ -266,14 +267,15 @@ public class Studio extends JPanel implements Observer,WindowListener {
         um.discardAllEdits();
         updateUndoRedoState(um);
 
-
-        this.editorsPane.addTab(this.currentFile, c);
+        String cleanFileName = this.shortNameMap.getOrDefault(this.currentFile, this.currentFile);
+        this.editorsPane.addTab(cleanFileName, c);
         this.editorsPane.setSelectedIndex(this.editorsPane.getComponentCount() - 1);
         this.splitpane.setDividerLocation(0.5);
 
 
         rebuildToolbar();
         rebuildMenuBar();
+
 
 //        textArea.requestFocus();
     }
@@ -793,8 +795,10 @@ public class Studio extends JPanel implements Observer,WindowListener {
         return contents.toString();
     }
 
-    public void loadFile(String filename) {
-        String s = getContents(new File(filename));
+    private void loadFile(String filename) {
+        File f = new File(filename);
+        String s = getContents(f);
+        this.shortNameMap.put(filename, f.getName());
         this.currentFile = filename;
         initDocument(filename);
         try {
@@ -816,9 +820,10 @@ public class Studio extends JPanel implements Observer,WindowListener {
     }
 
     private void removeTabWithTitle(String tabTitleToRemove) {
+        String shortName = this.shortNameMap.get(tabTitleToRemove);
         for (int i = 0; i < editorsPane.getTabCount(); i++) {
-            String tabTitle = editorsPane.getTitleAt(i);
-            if (tabTitle.equals(tabTitleToRemove)) {
+            String tabTitle = this.editorsPane.getTitleAt(i);
+            if (tabTitle.equals(shortName)) {
                 editorsPane.remove(i);
                 break;
             }
@@ -1353,15 +1358,6 @@ public class Studio extends JPanel implements Observer,WindowListener {
         return okToExit;
     }
 
-    private int getTabNumber(String title) {
-        for(int i  = 0; i < this.editorsPane.getTabCount(); i++) {
-            if(this.editorsPane.getTitleAt(i).equals(title)) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
     public boolean closeFile() {
         if (getModified()) {
             int choice = JOptionPane.showOptionDialog(frame,
@@ -1850,16 +1846,26 @@ public class Studio extends JPanel implements Observer,WindowListener {
         splitpane.setDividerLocation(0.5);
     }
 
-    public Studio(Server server,String filename) {
+    private String getFullName(String shortName) {
+        for(Map.Entry<String, String> pair : this.shortNameMap.entrySet()) {
+            if(pair.getValue().equals(shortName)) {
+                return pair.getKey();
+            }
+        }
+        return "";
+    }
+
+    public Studio(Server server, String filename) {
         super(true);
 
         this.editorsMap = new HashMap<>();
         this.serverMap = new HashMap<>();
         this.editorsPane = new DndTabbedPane();
+        this.shortNameMap = new HashMap<>();
 
         this.editorsPane.addChangeListener(e -> {
             if(this.editorsPane.getSelectedIndex() >= 0) {
-                this.currentFile = this.editorsPane.getTitleAt(this.editorsPane.getSelectedIndex());
+                this.currentFile = this.getFullName(this.editorsPane.getTitleAt(this.editorsPane.getSelectedIndex()));
                 Server fileServer = this.serverMap.get(this.currentFile);
                 if(fileServer != null) {
                     setServer(fileServer);
@@ -1984,8 +1990,9 @@ public class Studio extends JPanel implements Observer,WindowListener {
                     filename=args[0];
             } else if (mruFiles.length > 0) {
                 File f = new File(mruFiles[0]);
-                if (f.exists())
+                if (f.exists()) {
                     filename = mruFiles[0];
+                }
             }
 
             Locale.setDefault(Locale.US);
