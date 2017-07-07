@@ -984,8 +984,9 @@ public class Studio extends JPanel implements Observer,WindowListener {
     }
 
     private void setServer(Server server) {
-        if (server == null)
+        if (server == null) {
             return;
+        }
 
         this.server = server;
         this.serverMap.put(this.currentFile, server);
@@ -993,8 +994,9 @@ public class Studio extends JPanel implements Observer,WindowListener {
         if (this.getCurrentEditor().getEditor() != null) {
             Document doc = this.getCurrentEditor().getEditor().getDocument();
 
-            if (doc != null)
+            if (doc != null) {
                 doc.putProperty("server",server);
+            }
             Utilities.getEditorUI(this.getCurrentEditor().getEditor()).getComponent().setBackground(server.getBackgroundColor());
         }
 
@@ -1422,8 +1424,17 @@ public class Studio extends JPanel implements Observer,WindowListener {
                         menubar.repaint();
                         frame.validate();
                         frame.repaint();
+                        this.menubarProdServer();
                     }
                 });
+    }
+
+    private void menubarProdServer() {
+        if(this.server != null && this.server.getName().toLowerCase().contains("prod")) {
+            if(this.menubar != null) {
+                this.menubar.setBackground(Color.RED);
+            }
+        }
     }
 
     private JMenuBar createMenuBar() {
@@ -1481,8 +1492,6 @@ public class Studio extends JPanel implements Observer,WindowListener {
         menu.addSeparator();
         menu.add(new JMenuItem(findAction));
         menu.add(new JMenuItem(replaceAction));
-//        menu.addSeparator();
-//        menu.add(new JMenuItem(editFontAction));
         menubar.add(menu);
 
         menu = new JMenu(I18n.getString("Server"));
@@ -1602,9 +1611,13 @@ public class Studio extends JPanel implements Observer,WindowListener {
         menu = new JMenu(I18n.getString("Help"));
         menu.setMnemonic(KeyEvent.VK_H);
         menu.add(new JMenuItem(codeKxComAction));
-        if (!MAC_OS_X)
+        if (!MAC_OS_X) {
             menu.add(new JMenuItem(aboutAction));
+        }
         menubar.add(menu);
+
+
+
 
         return menubar;
     }
@@ -1878,6 +1891,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
         setServer(server);
         menubar = createMenuBar();
         toolbar = createToolbar();
+        this.menubarProdServer();
 
         this.tabbedPane = new JTabbedPane();
         this.splitpane.setBottomComponent(tabbedPane);
