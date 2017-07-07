@@ -803,6 +803,7 @@ public class Studio extends JPanel implements Observer,WindowListener {
             e.printStackTrace();
         }
         this.getCurrentEditor().getEditor().setCaretPosition(0);
+        this.setModified(false);
         windowListMonitor.fireMyEvent(new WindowListChangedEvent(this));
         refreshFrameTitle();
     }
